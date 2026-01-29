@@ -11,25 +11,36 @@ interface TokenProps {
   isSelected: boolean;
 }
 
-const COLORS: Record<PlayerColor, { main: string; dark: string; light: string }> = {
-  red: { main: '#DC2626', dark: '#991B1B', light: '#FCA5A5' },
-  blue: { main: '#2563EB', dark: '#1E40AF', light: '#93C5FD' },
-  green: { main: '#16A34A', dark: '#166534', light: '#86EFAC' },
-  yellow: { main: '#CA8A04', dark: '#A16207', light: '#FDE047' },
+// Premium Airbnb-inspired colors
+const COLORS: Record<PlayerColor, { primary: string; gradient: string; shadow: string }> = {
+  red: {
+    primary: '#FF385C',
+    gradient: 'linear-gradient(180deg, #FF5A79 0%, #E31C5F 100%)',
+    shadow: '0 4px 12px rgba(255, 56, 92, 0.4)',
+  },
+  blue: {
+    primary: '#428BF9',
+    gradient: 'linear-gradient(180deg, #5FA0FF 0%, #2E7AF0 100%)',
+    shadow: '0 4px 12px rgba(66, 139, 249, 0.4)',
+  },
+  green: {
+    primary: '#00A699',
+    gradient: 'linear-gradient(180deg, #00C4B4 0%, #008F84 100%)',
+    shadow: '0 4px 12px rgba(0, 166, 153, 0.4)',
+  },
+  yellow: {
+    primary: '#FFB400',
+    gradient: 'linear-gradient(180deg, #FFC933 0%, #E6A200 100%)',
+    shadow: '0 4px 12px rgba(255, 180, 0, 0.4)',
+  },
 };
 
-export default function Token({
-  token,
-  position,
-  isSelectable,
-  isSelected,
-}: TokenProps) {
+export default function Token({ token, position, isSelectable, isSelected }: TokenProps) {
   const { selectToken, confirmMove } = useGameStore();
   const color = COLORS[token.color];
 
   const handleClick = () => {
     if (!isSelectable) return;
-
     if (isSelected) {
       confirmMove();
     } else {
@@ -45,81 +56,84 @@ export default function Token({
       style={{
         left: `${position.x}%`,
         top: `${position.y}%`,
-        transform: 'translate(-50%, -50%)',
         zIndex: isSelected ? 50 : isSelectable ? 40 : 30,
       }}
+      initial={false}
       animate={{
-        scale: isSelected ? 1.3 : 1,
+        scale: isSelected ? 1.2 : 1,
+        y: isSelected ? -4 : 0,
       }}
-      whileHover={isSelectable ? { scale: 1.2 } : {}}
-      whileTap={isSelectable ? { scale: 0.9 } : {}}
-      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      whileHover={isSelectable ? { scale: 1.15, y: -2 } : {}}
+      whileTap={isSelectable ? { scale: 0.95 } : {}}
+      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
     >
-      {/* Pulsing selection indicator */}
+      {/* Selection ring pulse */}
       {isSelectable && (
         <motion.div
-          className="absolute inset-0 rounded-full"
+          className="absolute rounded-full"
           style={{
-            backgroundColor: color.main,
-            width: 28,
-            height: 28,
-            left: -2,
-            top: -2,
+            width: 36,
+            height: 36,
+            left: -6,
+            top: -6,
+            border: `2px solid ${color.primary}`,
           }}
           animate={{
-            scale: [1, 1.4, 1],
-            opacity: [0.6, 0, 0.6],
+            scale: [1, 1.3, 1],
+            opacity: [0.8, 0, 0.8],
           }}
-          transition={{ duration: 1.2, repeat: Infinity }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
         />
       )}
 
-      {/* Token body - Classic pawn shape */}
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        className={isSelectable ? 'cursor-pointer' : 'cursor-default'}
+      {/* Token body */}
+      <div
+        className="relative rounded-full flex items-center justify-center"
+        style={{
+          width: 24,
+          height: 24,
+          background: color.gradient,
+          boxShadow: isSelected
+            ? `${color.shadow}, 0 0 0 3px white, 0 0 0 5px ${color.primary}`
+            : color.shadow,
+          transform: 'translate(-50%, -50%)',
+          cursor: isSelectable ? 'pointer' : 'default',
+        }}
       >
-        {/* Shadow */}
-        <ellipse cx="12" cy="22" rx="8" ry="2" fill="rgba(0,0,0,0.2)" />
-
-        {/* Base */}
-        <ellipse cx="12" cy="20" rx="8" ry="3" fill={color.dark} />
-
-        {/* Body */}
-        <path
-          d="M6 20 C6 14, 8 10, 12 10 C16 10, 18 14, 18 20"
-          fill={color.main}
+        {/* Shine effect */}
+        <div
+          className="absolute rounded-full"
+          style={{
+            width: 8,
+            height: 8,
+            top: 3,
+            left: 4,
+            background: 'rgba(255,255,255,0.4)',
+          }}
         />
 
-        {/* Head */}
-        <circle cx="12" cy="7" r="5" fill={color.main} />
-
-        {/* Highlight on head */}
-        <circle cx="10" cy="5" r="2" fill={color.light} opacity="0.6" />
-
-        {/* Selection ring */}
-        {isSelected && (
-          <circle
-            cx="12"
-            cy="12"
-            r="11"
-            fill="none"
-            stroke="white"
-            strokeWidth="2"
-          />
-        )}
-      </svg>
+        {/* Inner dot */}
+        <div
+          className="rounded-full"
+          style={{
+            width: 6,
+            height: 6,
+            background: 'rgba(255,255,255,0.3)',
+          }}
+        />
+      </div>
 
       {/* Shield indicator */}
       {token.isShielded && (
         <motion.div
-          className="absolute -top-1 -right-1 w-4 h-4 bg-cyan-400 rounded-full flex items-center justify-center text-xs"
-          animate={{ scale: [1, 1.2, 1] }}
-          transition={{ duration: 1, repeat: Infinity }}
+          className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white flex items-center justify-center text-xs"
+          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
+          animate={{ scale: [1, 1.1, 1] }}
+          transition={{ duration: 2, repeat: Infinity }}
         >
-          🛡
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="#00A699">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
         </motion.div>
       )}
     </motion.button>

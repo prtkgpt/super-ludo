@@ -13,11 +13,9 @@ export default function AdBanner({ type, onRewardEarned, onClose }: AdBannerProp
   const [watching, setWatching] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  // Simulate watching a rewarded ad
   const watchRewardedAd = async () => {
     setWatching(true);
 
-    // Simulate ad progress
     for (let i = 0; i <= 100; i += 10) {
       await new Promise(resolve => setTimeout(resolve, 300));
       setProgress(i);
@@ -29,11 +27,8 @@ export default function AdBanner({ type, onRewardEarned, onClose }: AdBannerProp
 
   if (type === 'banner') {
     return (
-      <div className="w-full h-14 bg-gradient-to-r from-gray-800 to-gray-900 flex items-center justify-center border-t border-gray-700">
-        <div className="text-gray-400 text-xs">
-          {/* Placeholder for real ad integration */}
-          <span className="opacity-50">Advertisement</span>
-        </div>
+      <div className="w-full h-12 bg-gray-50 flex items-center justify-center border-t border-gray-100">
+        <span className="text-gray-300 text-xs font-medium">Ad Space</span>
       </div>
     );
   }
@@ -45,50 +40,75 @@ export default function AdBanner({ type, onRewardEarned, onClose }: AdBannerProp
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
         >
           <motion.div
             initial={{ scale: 0.9, y: 20 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.9, y: 20 }}
-            className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-purple-500"
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="bg-white rounded-3xl p-6 max-w-sm w-full"
+            style={{ boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}
           >
             {watching ? (
-              <div className="text-center">
-                <p className="text-white text-lg mb-4">Watching ad...</p>
-                <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+              <div className="text-center py-4">
+                <motion.div
+                  className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
+                  style={{ background: '#FF385C' }}
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                >
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  </svg>
+                </motion.div>
+                <p className="text-gray-900 font-medium mb-4">Loading reward...</p>
+                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                   <motion.div
-                    className="h-full bg-gradient-to-r from-green-400 to-emerald-500"
+                    className="h-full rounded-full"
+                    style={{ background: 'linear-gradient(90deg, #FF385C, #E31C5F)' }}
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                   />
                 </div>
-                <p className="text-gray-400 text-sm mt-2">{progress}%</p>
               </div>
             ) : (
               <>
                 <div className="text-center mb-6">
-                  <span className="text-5xl">🎁</span>
-                  <h3 className="text-xl font-bold text-white mt-3">
-                    Free Power-Up!
+                  <div
+                    className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+                    style={{ background: '#FFF8E6' }}
+                  >
+                    <svg className="w-8 h-8" fill="#FFB400" viewBox="0 0 24 24">
+                      <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">
+                    Get a Power-Up
                   </h3>
-                  <p className="text-gray-300 text-sm mt-2">
-                    Watch a short video to get a random power-up
+                  <p className="text-gray-500 text-sm mt-2">
+                    Watch a short video to earn a bonus
                   </p>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="space-y-3">
+                  <motion.button
+                    onClick={watchRewardedAd}
+                    className="w-full py-4 px-6 rounded-xl font-semibold text-white transition-all"
+                    style={{
+                      background: 'linear-gradient(135deg, #FF385C 0%, #E31C5F 100%)',
+                      boxShadow: '0 4px 16px rgba(255, 56, 92, 0.3)',
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    Watch Video
+                  </motion.button>
                   <button
                     onClick={onClose}
-                    className="flex-1 py-3 px-4 bg-gray-700 text-gray-300 rounded-xl font-medium hover:bg-gray-600 transition-colors"
+                    className="w-full py-3 text-gray-500 font-medium hover:text-gray-700 transition-colors"
                   >
                     No thanks
-                  </button>
-                  <button
-                    onClick={watchRewardedAd}
-                    className="flex-1 py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-bold hover:from-green-400 hover:to-emerald-400 transition-colors"
-                  >
-                    Watch Ad
                   </button>
                 </div>
               </>
@@ -106,23 +126,24 @@ export default function AdBanner({ type, onRewardEarned, onClose }: AdBannerProp
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black flex items-center justify-center z-50"
+          className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50"
         >
-          <div className="text-center">
-            <p className="text-gray-400 text-sm mb-4">Advertisement</p>
-            <div className="w-64 h-64 bg-gray-800 rounded-xl flex items-center justify-center">
-              <span className="text-gray-500">Ad Content</span>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-64 h-64 bg-gray-50 rounded-2xl flex items-center justify-center">
+              <span className="text-gray-300 font-medium">Ad Content</span>
             </div>
-            <motion.button
-              onClick={onClose}
-              className="mt-4 px-6 py-2 bg-white text-black rounded-full font-medium"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 3 }}
-            >
-              Close
-            </motion.button>
           </div>
+          <motion.button
+            onClick={onClose}
+            className="mb-8 px-8 py-3 bg-gray-900 text-white rounded-xl font-medium"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 3 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            Continue
+          </motion.button>
         </motion.div>
       </AnimatePresence>
     );
