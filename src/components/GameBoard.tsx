@@ -1,303 +1,425 @@
 'use client';
 
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '@/store/gameStore';
 import Token from './Token';
-import {
-  PlayerColor,
-  BOARD_SIZE,
-  START_POSITIONS,
-  SAFE_TILES,
-  BOOST_TILES,
-  MYSTERY_TILES,
-  WARP_TILES,
-  COIN_TILES,
-} from '@/types/game';
+import { PlayerColor, START_POSITIONS, SAFE_TILES } from '@/types/game';
 
-const colorSchemes: Record<PlayerColor, { bg: string; light: string; dark: string }> = {
-  red: { bg: 'bg-red-500', light: 'bg-red-300', dark: 'bg-red-700' },
-  blue: { bg: 'bg-blue-500', light: 'bg-blue-300', dark: 'bg-blue-700' },
-  green: { bg: 'bg-green-500', light: 'bg-green-300', dark: 'bg-green-700' },
-  yellow: { bg: 'bg-yellow-500', light: 'bg-yellow-300', dark: 'bg-yellow-700' },
+// Classic Ludo board is a 15x15 grid
+const GRID_SIZE = 15;
+const CELL_SIZE = 100 / GRID_SIZE;
+
+// Color configuration
+const COLORS: Record<PlayerColor, { primary: string; light: string; safe: string }> = {
+  red: { primary: '#DC2626', light: '#FEE2E2', safe: '#EF4444' },
+  green: { primary: '#16A34A', light: '#DCFCE7', safe: '#22C55E' },
+  yellow: { primary: '#CA8A04', light: '#FEF9C3', safe: '#EAB308' },
+  blue: { primary: '#2563EB', light: '#DBEAFE', safe: '#3B82F6' },
 };
 
-// Calculate tile position on the board (returns percentage coordinates)
-function getTilePosition(index: number): { x: number; y: number } {
-  // Board is laid out as a cross pattern
-  // Main track goes around the outside, home stretch goes to center
+// Define the path tiles (the cross-shaped track)
+// Each tile has grid position and optional color for safe/start tiles
+interface PathTile {
+  row: number;
+  col: number;
+  isStart?: PlayerColor;
+  isSafe?: boolean;
+}
 
-  const gridSize = 15;
-  const cellSize = 100 / gridSize;
+// Generate the main path (52 tiles going clockwise from red's start)
+function generatePath(): PathTile[] {
+  const path: PathTile[] = [];
 
-  // Define the path around the board (simplified cross pattern)
-  // This creates a clockwise path starting from bottom-left going up
-  const pathPositions: { x: number; y: number }[] = [];
+  // Red's column going up (bottom to top on left side of top arm)
+  for (let r = 5; r >= 0; r--) path.push({ row: r, col: 6 });
+  // Top arm going right
+  for (let c = 7; c <= 8; c++) path.push({ row: 0, col: c });
+  // Blue's column going down (top to bottom on right side of right arm)
+  for (let r = 1; r <= 5; r++) path.push({ row: r, col: 8 });
+  // Right arm going right
+  for (let c = 9; c <= 14; c++) path.push({ row: 6, col: c });
+  // Blue's row going down
+  for (let r = 7; r <= 8; r++) path.push({ row: r, col: 14 });
+  // Yellow's column going left (right side going in)
+  for (let c = 13; c >= 9; c--) path.push({ row: 8, col: c });
+  // Bottom arm going down
+  for (let r = 9; r <= 14; r++) path.push({ row: r, col: 8 });
+  // Yellow's row going left
+  for (let c = 7; c >= 6; c--) path.push({ row: 14, col: c });
+  // Green's column going up
+  for (let r = 13; r >= 9; r--) path.push({ row: r, col: 6 });
+  // Left arm going left
+  for (let c = 5; c >= 0; c--) path.push({ row: 8, col: c });
+  // Green's row going up
+  for (let r = 7; r >= 6; r--) path.push({ row: r, col: 0 });
+  // Red's column continuing (completing the loop)
+  for (let c = 1; c <= 5; c++) path.push({ row: 6, col: c });
 
-  // Bottom left to top left (red's path)
-  for (let i = 6; i >= 1; i--) pathPositions.push({ x: 0, y: i });
-  pathPositions.push({ x: 0, y: 0 });
+  // Mark safe tiles and start positions
+  const safeIndices = [0, 8, 13, 21, 26, 34, 39, 47];
+  const startPositions: Record<number, PlayerColor> = {
+    0: 'red',
+    13: 'blue',
+    26: 'yellow',
+    39: 'green',
+  };
 
-  // Top left going right
-  for (let i = 1; i <= 5; i++) pathPositions.push({ x: i, y: 0 });
+  path.forEach((tile, i) => {
+    if (safeIndices.includes(i)) tile.isSafe = true;
+    if (startPositions[i]) tile.isStart = startPositions[i];
+  });
 
-  // Top middle down to center
-  pathPositions.push({ x: 6, y: 0 });
-  pathPositions.push({ x: 6, y: 1 });
+  return path;
+}
 
-  // Around blue's corner
-  for (let i = 2; i <= 6; i++) pathPositions.push({ x: 6, y: i });
+// Get position for a token based on its path index
+function getTokenPosition(pathIndex: number, color: PlayerColor): { x: number; y: number } {
+  const path = generatePath();
 
-  // Across to right
-  for (let i = 7; i <= 14; i++) pathPositions.push({ x: i, y: 6 });
+  if (pathIndex === -1) {
+    // Home base - will be handled separately
+    return { x: 0, y: 0 };
+  }
 
-  // Down on right side
-  pathPositions.push({ x: 14, y: 7 });
-  pathPositions.push({ x: 14, y: 8 });
+  if (pathIndex >= 52) {
+    // In home stretch (52-56) or finished (57)
+    const homeStretchIndex = pathIndex - 52;
+    const homeStretchPositions: Record<PlayerColor, { row: number; col: number }[]> = {
+      red: [
+        { row: 7, col: 1 }, { row: 7, col: 2 }, { row: 7, col: 3 },
+        { row: 7, col: 4 }, { row: 7, col: 5 }, { row: 7, col: 6 },
+      ],
+      blue: [
+        { row: 1, col: 7 }, { row: 2, col: 7 }, { row: 3, col: 7 },
+        { row: 4, col: 7 }, { row: 5, col: 7 }, { row: 6, col: 7 },
+      ],
+      yellow: [
+        { row: 7, col: 13 }, { row: 7, col: 12 }, { row: 7, col: 11 },
+        { row: 7, col: 10 }, { row: 7, col: 9 }, { row: 7, col: 8 },
+      ],
+      green: [
+        { row: 13, col: 7 }, { row: 12, col: 7 }, { row: 11, col: 7 },
+        { row: 10, col: 7 }, { row: 9, col: 7 }, { row: 8, col: 7 },
+      ],
+    };
 
-  // Around yellow's corner
-  for (let i = 14; i >= 9; i--) pathPositions.push({ x: i, y: 8 });
+    if (pathIndex === 57) {
+      // Finished - center
+      return { x: 50, y: 50 };
+    }
 
-  // Down to bottom right
-  for (let i = 9; i <= 14; i++) pathPositions.push({ x: 8, y: i });
+    const pos = homeStretchPositions[color][homeStretchIndex];
+    return {
+      x: (pos.col + 0.5) * CELL_SIZE,
+      y: (pos.row + 0.5) * CELL_SIZE,
+    };
+  }
 
-  // Bottom right going left
-  pathPositions.push({ x: 7, y: 14 });
-  for (let i = 6; i >= 0; i--) pathPositions.push({ x: i, y: 14 });
-
-  // Up on left side
-  pathPositions.push({ x: 0, y: 13 });
-  for (let i = 12; i >= 8; i--) pathPositions.push({ x: 0, y: i });
-
-  // Simplified: just map index to angle around board
-  const angle = (index / BOARD_SIZE) * 2 * Math.PI - Math.PI / 2;
-  const radius = 38;
-  const centerX = 50;
-  const centerY = 50;
-
+  // On main path
+  const tile = path[pathIndex];
   return {
-    x: centerX + radius * Math.cos(angle),
-    y: centerY + radius * Math.sin(angle),
+    x: (tile.col + 0.5) * CELL_SIZE,
+    y: (tile.row + 0.5) * CELL_SIZE,
   };
 }
 
-// Get home base position for a token
-function getHomePosition(color: PlayerColor, tokenIndex: number): { x: number; y: number } {
-  const homePositions: Record<PlayerColor, { x: number; y: number }> = {
-    red: { x: 20, y: 20 },
-    blue: { x: 80, y: 20 },
-    yellow: { x: 80, y: 80 },
-    green: { x: 20, y: 80 },
+// Get home base position for tokens at home
+function getHomeBasePosition(color: PlayerColor, tokenIndex: number): { x: number; y: number } {
+  const homeAreas: Record<PlayerColor, { baseX: number; baseY: number }> = {
+    red: { baseX: 1.5, baseY: 1.5 },
+    green: { baseX: 1.5, baseY: 10.5 },
+    yellow: { baseX: 10.5, baseY: 10.5 },
+    blue: { baseX: 10.5, baseY: 1.5 },
   };
 
-  const base = homePositions[color];
   const offsets = [
-    { x: -5, y: -5 },
-    { x: 5, y: -5 },
-    { x: -5, y: 5 },
-    { x: 5, y: 5 },
+    { x: 0, y: 0 },
+    { x: 2, y: 0 },
+    { x: 0, y: 2 },
+    { x: 2, y: 2 },
   ];
 
-  return {
-    x: base.x + offsets[tokenIndex].x,
-    y: base.y + offsets[tokenIndex].y,
-  };
-}
-
-// Get finish lane position
-function getFinishPosition(color: PlayerColor, lanePosition: number): { x: number; y: number } {
-  const directions: Record<PlayerColor, { dx: number; dy: number }> = {
-    red: { dx: 1, dy: 0 },
-    blue: { dx: 0, dy: 1 },
-    yellow: { dx: -1, dy: 0 },
-    green: { dx: 0, dy: -1 },
-  };
-
-  const dir = directions[color];
-  const step = 5;
+  const base = homeAreas[color];
+  const offset = offsets[tokenIndex];
 
   return {
-    x: 50 + dir.dx * (step * (lanePosition - 51)),
-    y: 50 + dir.dy * (step * (lanePosition - 51)),
+    x: (base.baseX + offset.x + 0.5) * CELL_SIZE,
+    y: (base.baseY + offset.y + 0.5) * CELL_SIZE,
   };
 }
 
 export default function GameBoard() {
   const { gameState, validMoves, selectedToken } = useGameStore();
 
+  const path = useMemo(() => generatePath(), []);
+
   if (!gameState) return null;
 
-  // Render all tiles
-  const tiles = useMemo(() => {
-    return Array.from({ length: BOARD_SIZE }, (_, i) => {
-      const pos = getTilePosition(i);
-      let tileClass = 'bg-gray-200';
-      let icon = '';
+  // Render the board grid
+  const renderBoard = () => {
+    const cells: React.ReactElement[] = [];
 
-      if (SAFE_TILES.includes(i)) {
-        tileClass = 'bg-gradient-to-br from-amber-300 to-yellow-400';
-        icon = '⭐';
-      } else if (BOOST_TILES.includes(i)) {
-        tileClass = 'bg-gradient-to-br from-cyan-400 to-blue-500';
-        icon = '🚀';
-      } else if (MYSTERY_TILES.includes(i)) {
-        tileClass = 'bg-gradient-to-br from-purple-400 to-pink-500';
-        icon = '🎁';
-      } else if (WARP_TILES.includes(i)) {
-        tileClass = 'bg-gradient-to-br from-indigo-500 to-violet-600';
-        icon = '🌀';
-      } else if (COIN_TILES.includes(i)) {
-        tileClass = 'bg-gradient-to-br from-yellow-400 to-orange-500';
-        icon = '💰';
-      }
+    for (let row = 0; row < GRID_SIZE; row++) {
+      for (let col = 0; col < GRID_SIZE; col++) {
+        const key = `${row}-${col}`;
+        const x = col * CELL_SIZE;
+        const y = row * CELL_SIZE;
 
-      // Start positions
-      const colors: PlayerColor[] = ['red', 'blue', 'yellow', 'green'];
-      for (const color of colors) {
-        if (START_POSITIONS[color] === i) {
-          tileClass = `${colorSchemes[color].bg}`;
+        // Determine cell type
+        let cellColor = 'transparent';
+        let borderColor = 'transparent';
+        let showCell = false;
+
+        // Home bases (corners)
+        const isRedHome = row < 6 && col < 6;
+        const isBlueHome = row < 6 && col > 8;
+        const isYellowHome = row > 8 && col > 8;
+        const isGreenHome = row > 8 && col < 6;
+
+        // Center triangle area
+        const isCenter = row >= 6 && row <= 8 && col >= 6 && col <= 8;
+
+        // Cross paths
+        const isVerticalPath = col >= 6 && col <= 8;
+        const isHorizontalPath = row >= 6 && row <= 8;
+        const isPath = isVerticalPath || isHorizontalPath;
+
+        // Home stretches (colored paths to center)
+        const isRedStretch = row === 7 && col >= 1 && col <= 5;
+        const isBlueStretch = col === 7 && row >= 1 && row <= 5;
+        const isYellowStretch = row === 7 && col >= 9 && col <= 13;
+        const isGreenStretch = col === 7 && row >= 9 && row <= 13;
+
+        if (isRedHome) {
+          cellColor = COLORS.red.light;
+          showCell = true;
+        } else if (isBlueHome) {
+          cellColor = COLORS.blue.light;
+          showCell = true;
+        } else if (isYellowHome) {
+          cellColor = COLORS.yellow.light;
+          showCell = true;
+        } else if (isGreenHome) {
+          cellColor = COLORS.green.light;
+          showCell = true;
+        } else if (isCenter) {
+          // Don't render center cells, we'll add triangles
+          showCell = false;
+        } else if (isRedStretch) {
+          cellColor = COLORS.red.light;
+          borderColor = '#E5E7EB';
+          showCell = true;
+        } else if (isBlueStretch) {
+          cellColor = COLORS.blue.light;
+          borderColor = '#E5E7EB';
+          showCell = true;
+        } else if (isYellowStretch) {
+          cellColor = COLORS.yellow.light;
+          borderColor = '#E5E7EB';
+          showCell = true;
+        } else if (isGreenStretch) {
+          cellColor = COLORS.green.light;
+          borderColor = '#E5E7EB';
+          showCell = true;
+        } else if (isPath) {
+          cellColor = '#FFFFFF';
+          borderColor = '#E5E7EB';
+          showCell = true;
+        }
+
+        if (showCell) {
+          cells.push(
+            <div
+              key={key}
+              className="absolute"
+              style={{
+                left: `${x}%`,
+                top: `${y}%`,
+                width: `${CELL_SIZE}%`,
+                height: `${CELL_SIZE}%`,
+                backgroundColor: cellColor,
+                borderWidth: borderColor !== 'transparent' ? '0.5px' : '0',
+                borderColor: borderColor,
+                borderStyle: 'solid',
+              }}
+            />
+          );
         }
       }
+    }
 
-      return (
-        <motion.div
-          key={i}
-          className={`
-            absolute w-6 h-6 rounded-md ${tileClass}
-            border border-gray-300 shadow-sm
-            flex items-center justify-center
-          `}
-          style={{
-            left: `${pos.x}%`,
-            top: `${pos.y}%`,
-            transform: 'translate(-50%, -50%)',
-          }}
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: i * 0.01 }}
-        >
-          {icon && <span className="text-xs">{icon}</span>}
-        </motion.div>
-      );
-    });
-  }, []);
+    return cells;
+  };
 
-  // Render home bases
-  const homeBases = useMemo(() => {
+  // Render home base circles (where tokens start)
+  const renderHomeBases = () => {
+    const bases: React.ReactElement[] = [];
     const colors: PlayerColor[] = ['red', 'blue', 'yellow', 'green'];
-    const positions: Record<PlayerColor, { left: string; top: string }> = {
-      red: { left: '10%', top: '10%' },
-      blue: { left: '70%', top: '10%' },
-      yellow: { left: '70%', top: '70%' },
-      green: { left: '10%', top: '70%' },
+
+    const homePositions: Record<PlayerColor, { x: number; y: number }> = {
+      red: { x: 1.5, y: 1.5 },
+      blue: { x: 10.5, y: 1.5 },
+      yellow: { x: 10.5, y: 10.5 },
+      green: { x: 1.5, y: 10.5 },
     };
 
-    return colors.map((color) => (
+    colors.forEach((color) => {
+      const pos = homePositions[color];
+      bases.push(
+        <div
+          key={`home-${color}`}
+          className="absolute rounded-lg shadow-inner"
+          style={{
+            left: `${pos.x * CELL_SIZE}%`,
+            top: `${pos.y * CELL_SIZE}%`,
+            width: `${3 * CELL_SIZE}%`,
+            height: `${3 * CELL_SIZE}%`,
+            backgroundColor: '#FFFFFF',
+            border: `3px solid ${COLORS[color].primary}`,
+          }}
+        >
+          {/* Token spots */}
+          {[0, 1, 2, 3].map((i) => {
+            const spotX = (i % 2) * 1.5 + 0.5;
+            const spotY = Math.floor(i / 2) * 1.5 + 0.5;
+            return (
+              <div
+                key={`spot-${color}-${i}`}
+                className="absolute rounded-full"
+                style={{
+                  left: `${(spotX / 3) * 100}%`,
+                  top: `${(spotY / 3) * 100}%`,
+                  width: `${(1 / 3) * 100}%`,
+                  height: `${(1 / 3) * 100}%`,
+                  backgroundColor: COLORS[color].light,
+                  border: `2px solid ${COLORS[color].primary}`,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              />
+            );
+          })}
+        </div>
+      );
+    });
+
+    return bases;
+  };
+
+  // Render center home triangle
+  const renderCenter = () => {
+    return (
       <div
-        key={color}
-        className={`
-          absolute w-[25%] h-[25%] rounded-2xl
-          ${colorSchemes[color].light} border-4 ${colorSchemes[color].dark.replace('bg-', 'border-')}
-          shadow-lg
-        `}
-        style={positions[color]}
+        className="absolute overflow-hidden"
+        style={{
+          left: `${6 * CELL_SIZE}%`,
+          top: `${6 * CELL_SIZE}%`,
+          width: `${3 * CELL_SIZE}%`,
+          height: `${3 * CELL_SIZE}%`,
+        }}
       >
-        <div className="absolute inset-2 rounded-xl bg-white/30" />
+        {/* Four triangles pointing to center */}
+        <svg viewBox="0 0 100 100" className="w-full h-full">
+          <polygon points="0,0 50,50 100,0" fill={COLORS.blue.primary} />
+          <polygon points="100,0 50,50 100,100" fill={COLORS.yellow.primary} />
+          <polygon points="100,100 50,50 0,100" fill={COLORS.green.primary} />
+          <polygon points="0,100 50,50 0,0" fill={COLORS.red.primary} />
+          <circle cx="50" cy="50" r="15" fill="white" stroke="#D1D5DB" strokeWidth="2" />
+        </svg>
       </div>
-    ));
-  }, []);
+    );
+  };
 
-  // Render center
-  const center = (
-    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[15%] h-[15%]">
-      <div className="w-full h-full rounded-lg bg-gradient-to-br from-gray-100 to-gray-300 border-4 border-gray-400 shadow-inner flex items-center justify-center">
-        <span className="text-2xl">🏠</span>
-      </div>
-    </div>
-  );
+  // Render safe/star tiles
+  const renderSafeTiles = () => {
+    const safeTiles: React.ReactElement[] = [];
 
-  // Render finish lanes
-  const finishLanes = useMemo(() => {
-    const colors: PlayerColor[] = ['red', 'blue', 'yellow', 'green'];
-    return colors.map((color) => {
-      const lanes = [];
-      for (let i = 0; i < 6; i++) {
-        const pos = getFinishPosition(color, 52 + i);
-        lanes.push(
+    path.forEach((tile, index) => {
+      if (tile.isSafe || tile.isStart) {
+        const color = tile.isStart ||
+          (index < 13 ? 'red' : index < 26 ? 'blue' : index < 39 ? 'yellow' : 'green');
+
+        safeTiles.push(
           <div
-            key={`${color}-finish-${i}`}
-            className={`
-              absolute w-5 h-5 rounded
-              ${colorSchemes[color].light} border ${colorSchemes[color].dark.replace('bg-', 'border-')}
-            `}
+            key={`safe-${index}`}
+            className="absolute flex items-center justify-center"
             style={{
-              left: `${pos.x}%`,
-              top: `${pos.y}%`,
-              transform: 'translate(-50%, -50%)',
+              left: `${tile.col * CELL_SIZE}%`,
+              top: `${tile.row * CELL_SIZE}%`,
+              width: `${CELL_SIZE}%`,
+              height: `${CELL_SIZE}%`,
             }}
-          />
+          >
+            {tile.isStart ? (
+              <div
+                className="w-3/4 h-3/4 rounded"
+                style={{ backgroundColor: COLORS[tile.isStart].safe }}
+              />
+            ) : (
+              <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-400">
+                <path
+                  fill="currentColor"
+                  d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                />
+              </svg>
+            )}
+          </div>
         );
       }
-      return lanes;
     });
-  }, []);
+
+    return safeTiles;
+  };
 
   // Render all tokens
-  const tokens = gameState.players.flatMap((player, playerIndex) =>
-    player.tokens.map((token, tokenIndex) => {
-      let position: { x: number; y: number };
+  const renderTokens = () => {
+    return gameState.players.flatMap((player) =>
+      player.tokens.map((token, tokenIndex) => {
+        let position: { x: number; y: number };
 
-      if (token.position === -1) {
-        // In home base
-        position = getHomePosition(player.color, tokenIndex);
-      } else if (token.position >= 52) {
-        // In finish lane or finished
-        position = token.position === 57
-          ? { x: 50, y: 50 } // Center (finished)
-          : getFinishPosition(player.color, token.position);
-      } else {
-        // On main track
-        position = getTilePosition(token.position);
-      }
+        if (token.position === -1) {
+          position = getHomeBasePosition(player.color, tokenIndex);
+        } else {
+          position = getTokenPosition(token.position, player.color);
+        }
 
-      const isSelectable = validMoves.some((t) => t.id === token.id);
-      const isSelected = selectedToken?.id === token.id;
+        const isSelectable = validMoves.some((t) => t.id === token.id);
+        const isSelected = selectedToken?.id === token.id;
 
-      return (
-        <Token
-          key={token.id}
-          token={token}
-          position={position}
-          isSelectable={isSelectable}
-          isSelected={isSelected}
-        />
-      );
-    })
-  );
+        return (
+          <Token
+            key={token.id}
+            token={token}
+            position={position}
+            isSelectable={isSelectable}
+            isSelected={isSelected}
+          />
+        );
+      })
+    );
+  };
 
   return (
-    <div className="relative w-full aspect-square max-w-md mx-auto bg-gradient-to-br from-emerald-700 to-emerald-900 rounded-2xl shadow-2xl p-2 overflow-hidden">
-      {/* Background pattern */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="w-full h-full" style={{
-          backgroundImage: `repeating-linear-gradient(
-            45deg,
-            transparent,
-            transparent 10px,
-            rgba(255,255,255,0.1) 10px,
-            rgba(255,255,255,0.1) 20px
-          )`,
-        }} />
-      </div>
+    <div className="relative w-full aspect-square max-w-md mx-auto">
+      {/* Board background */}
+      <div
+        className="absolute inset-0 rounded-xl shadow-2xl"
+        style={{ backgroundColor: '#F3F4F6' }}
+      />
 
       {/* Board content */}
-      <div className="relative w-full h-full">
-        {homeBases}
-        {finishLanes}
-        {tiles}
-        {center}
-        {tokens}
+      <div className="absolute inset-2">
+        <div className="relative w-full h-full">
+          {renderBoard()}
+          {renderHomeBases()}
+          {renderSafeTiles()}
+          {renderCenter()}
+          {renderTokens()}
+        </div>
       </div>
+
+      {/* Board border */}
+      <div className="absolute inset-0 rounded-xl border-4 border-gray-300 pointer-events-none" />
     </div>
   );
 }

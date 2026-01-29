@@ -9,21 +9,13 @@ interface TokenProps {
   position: { x: number; y: number };
   isSelectable: boolean;
   isSelected: boolean;
-  size?: number;
 }
 
-const colorClasses: Record<PlayerColor, string> = {
-  red: 'bg-gradient-to-br from-red-400 to-red-600 border-red-700',
-  blue: 'bg-gradient-to-br from-blue-400 to-blue-600 border-blue-700',
-  green: 'bg-gradient-to-br from-green-400 to-green-600 border-green-700',
-  yellow: 'bg-gradient-to-br from-yellow-400 to-yellow-600 border-yellow-700',
-};
-
-const glowColors: Record<PlayerColor, string> = {
-  red: 'shadow-red-500/50',
-  blue: 'shadow-blue-500/50',
-  green: 'shadow-green-500/50',
-  yellow: 'shadow-yellow-500/50',
+const COLORS: Record<PlayerColor, { main: string; dark: string; light: string }> = {
+  red: { main: '#DC2626', dark: '#991B1B', light: '#FCA5A5' },
+  blue: { main: '#2563EB', dark: '#1E40AF', light: '#93C5FD' },
+  green: { main: '#16A34A', dark: '#166534', light: '#86EFAC' },
+  yellow: { main: '#CA8A04', dark: '#A16207', light: '#FDE047' },
 };
 
 export default function Token({
@@ -31,18 +23,16 @@ export default function Token({
   position,
   isSelectable,
   isSelected,
-  size = 32,
 }: TokenProps) {
-  const { selectToken, confirmMove, selectedToken } = useGameStore();
+  const { selectToken, confirmMove } = useGameStore();
+  const color = COLORS[token.color];
 
   const handleClick = () => {
     if (!isSelectable) return;
 
     if (isSelected) {
-      // Confirm the move
       confirmMove();
     } else {
-      // Select this token
       selectToken(token);
     }
   };
@@ -51,59 +41,87 @@ export default function Token({
     <motion.button
       onClick={handleClick}
       disabled={!isSelectable}
-      className={`
-        absolute rounded-full border-2
-        ${colorClasses[token.color]}
-        ${isSelectable ? 'cursor-pointer' : 'cursor-default'}
-        ${isSelected ? `ring-4 ring-white ${glowColors[token.color]} shadow-lg` : ''}
-        transition-all duration-200
-      `}
+      className="absolute"
       style={{
-        width: size,
-        height: size,
         left: `${position.x}%`,
         top: `${position.y}%`,
         transform: 'translate(-50%, -50%)',
+        zIndex: isSelected ? 50 : isSelectable ? 40 : 30,
       }}
-      initial={false}
       animate={{
-        x: 0,
-        y: 0,
-        scale: isSelected ? 1.2 : 1,
+        scale: isSelected ? 1.3 : 1,
       }}
-      whileHover={isSelectable ? { scale: 1.15 } : {}}
-      whileTap={isSelectable ? { scale: 0.95 } : {}}
-      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      whileHover={isSelectable ? { scale: 1.2 } : {}}
+      whileTap={isSelectable ? { scale: 0.9 } : {}}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
     >
+      {/* Pulsing selection indicator */}
+      {isSelectable && (
+        <motion.div
+          className="absolute inset-0 rounded-full"
+          style={{
+            backgroundColor: color.main,
+            width: 28,
+            height: 28,
+            left: -2,
+            top: -2,
+          }}
+          animate={{
+            scale: [1, 1.4, 1],
+            opacity: [0.6, 0, 0.6],
+          }}
+          transition={{ duration: 1.2, repeat: Infinity }}
+        />
+      )}
+
+      {/* Token body - Classic pawn shape */}
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        className={isSelectable ? 'cursor-pointer' : 'cursor-default'}
+      >
+        {/* Shadow */}
+        <ellipse cx="12" cy="22" rx="8" ry="2" fill="rgba(0,0,0,0.2)" />
+
+        {/* Base */}
+        <ellipse cx="12" cy="20" rx="8" ry="3" fill={color.dark} />
+
+        {/* Body */}
+        <path
+          d="M6 20 C6 14, 8 10, 12 10 C16 10, 18 14, 18 20"
+          fill={color.main}
+        />
+
+        {/* Head */}
+        <circle cx="12" cy="7" r="5" fill={color.main} />
+
+        {/* Highlight on head */}
+        <circle cx="10" cy="5" r="2" fill={color.light} opacity="0.6" />
+
+        {/* Selection ring */}
+        {isSelected && (
+          <circle
+            cx="12"
+            cy="12"
+            r="11"
+            fill="none"
+            stroke="white"
+            strokeWidth="2"
+          />
+        )}
+      </svg>
+
       {/* Shield indicator */}
       {token.isShielded && (
         <motion.div
-          className="absolute inset-0 rounded-full border-2 border-cyan-400"
-          animate={{
-            scale: [1, 1.3, 1],
-            opacity: [0.8, 0.4, 0.8],
-          }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-        />
-      )}
-
-      {/* Selection pulse */}
-      {isSelectable && !isSelected && (
-        <motion.div
-          className="absolute inset-0 rounded-full bg-white"
-          animate={{
-            scale: [1, 1.5],
-            opacity: [0.5, 0],
-          }}
+          className="absolute -top-1 -right-1 w-4 h-4 bg-cyan-400 rounded-full flex items-center justify-center text-xs"
+          animate={{ scale: [1, 1.2, 1] }}
           transition={{ duration: 1, repeat: Infinity }}
-        />
+        >
+          🛡
+        </motion.div>
       )}
-
-      {/* Inner shine */}
-      <div
-        className="absolute top-1 left-1 w-2 h-2 bg-white/40 rounded-full"
-        style={{ width: size / 4, height: size / 4 }}
-      />
     </motion.button>
   );
 }
